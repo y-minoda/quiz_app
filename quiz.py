@@ -170,11 +170,17 @@ def main():
         _all = load_problems()
         s_years = sorted({p['year'] for p in _all if p['type'] == goto['type']})
         idx = s_years.index(goto['year']) if goto['year'] in s_years else len(s_years) - 1
-        st.session_state['_app_mode']     = '📖 勉強'
-        st.session_state['_study_type']   = goto['type']
-        st.session_state.study_year_idx   = idx
-        st.session_state['_study_slider'] = goto['year']
-        st.session_state['_study_select'] = goto['year']
+        st.session_state['_app_mode']       = '📖 勉強'
+        st.session_state['_study_type']     = goto['type']
+        st.session_state.study_year_idx     = idx
+        st.session_state['_study_slider']   = goto['year']
+        st.session_state['_study_select']   = goto['year']
+        st.session_state['_came_from_quiz'] = True
+
+    if st.session_state.get('_goto_quiz'):
+        del st.session_state['_goto_quiz']
+        st.session_state['_app_mode']       = '🎯 クイズ'
+        st.session_state['_came_from_quiz'] = False
 
     # ── サイドバー ──────────────────────
     with st.sidebar:
@@ -182,9 +188,12 @@ def main():
         st.caption('問題の年度・問番号を当てるトレーニング')
         st.divider()
 
+        def _on_app_mode_change():
+            st.session_state['_came_from_quiz'] = False
+
         app_mode = st.radio('', ['🎯 クイズ', '📖 勉強'],
                             horizontal=True, label_visibility='collapsed',
-                            key='_app_mode')
+                            key='_app_mode', on_change=_on_app_mode_change)
         st.divider()
 
         if app_mode == '🎯 クイズ':
@@ -304,6 +313,10 @@ def main():
 
     # ── 勉強モード（早期リターン） ──────────────────────
     if app_mode == '📖 勉強':
+        if st.session_state.get('_came_from_quiz'):
+            if st.button('← クイズに戻る'):
+                st.session_state['_goto_quiz'] = True
+                st.rerun()
         st.markdown('# 📖 勉強モード')
         st.markdown(f'## {study_year}年度　{study_type}')
         st.divider()
