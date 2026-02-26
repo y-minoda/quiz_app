@@ -313,10 +313,12 @@ def main():
 
     # ── 勉強モード（早期リターン） ──────────────────────
     if app_mode == '📖 勉強':
-        if st.session_state.get('_came_from_quiz'):
-            if st.button('← クイズに戻る'):
-                st.session_state['_goto_quiz'] = True
-                st.rerun()
+        def _back_to_quiz():
+            st.session_state['_goto_quiz'] = True
+
+        came_from_quiz = st.session_state.get('_came_from_quiz')
+        if came_from_quiz:
+            st.button('← クイズに戻る', key='_back_top', on_click=_back_to_quiz)
         st.markdown('# 📖 勉強モード')
         st.markdown(f'## {study_year}年度　{study_type}')
         st.divider()
@@ -336,6 +338,8 @@ def main():
                         img = load_image(p)
                         st.image(img, use_container_width=True)
                         st.divider()
+        if came_from_quiz:
+            st.button('← クイズに戻る', key='_back_bottom', on_click=_back_to_quiz)
         return
 
     pool = filter_problems(all_probs, exam_type, year_range[0], year_range[1])
