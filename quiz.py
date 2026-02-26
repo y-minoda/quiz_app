@@ -164,6 +164,18 @@ def main():
     )
     init_state()
 
+    # 勉強モードへのナビゲーション（widget描画前に処理する必要がある）
+    if st.session_state.get('_goto_study'):
+        goto = st.session_state.pop('_goto_study')
+        _all = load_problems()
+        s_years = sorted({p['year'] for p in _all if p['type'] == goto['type']})
+        idx = s_years.index(goto['year']) if goto['year'] in s_years else len(s_years) - 1
+        st.session_state['_app_mode']     = '📖 勉強'
+        st.session_state['_study_type']   = goto['type']
+        st.session_state.study_year_idx   = idx
+        st.session_state['_study_slider'] = goto['year']
+        st.session_state['_study_select'] = goto['year']
+
     # ── サイドバー ──────────────────────
     with st.sidebar:
         st.markdown('# 📐 東大数学クイズ')
@@ -601,18 +613,13 @@ def main():
                     )
 
         # この年度の全問題を勉強モードで見るボタン
-        study_year_val  = q['year']
-        study_type_val  = q['type']
+        study_year_val = q['year']
+        study_type_val = q['type']
         if st.button(f'📖 {study_year_val}年度（{study_type_val}）の全問題を見る',
                      use_container_width=True):
-            _all = load_problems()
-            s_years = sorted({p['year'] for p in _all if p['type'] == study_type_val})
-            idx = s_years.index(study_year_val) if study_year_val in s_years else len(s_years) - 1
-            st.session_state['_app_mode']    = '📖 勉強'
-            st.session_state['_study_type']  = study_type_val
-            st.session_state.study_year_idx  = idx
-            st.session_state['_study_slider'] = study_year_val
-            st.session_state['_study_select'] = study_year_val
+            # widget描画後にwidgetキーを直接変更できないため、
+            # 次のrun開始時（widget描画前）に処理するフラグを立てる
+            st.session_state['_goto_study'] = {'year': study_year_val, 'type': study_type_val}
             st.rerun()
 
         st.button('次の問題へ →', on_click=reset_question, type='primary', use_container_width=True)
