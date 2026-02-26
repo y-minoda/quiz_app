@@ -4,6 +4,7 @@
 """
 import json
 import random
+import time
 from pathlib import Path
 
 import streamlit as st
@@ -12,7 +13,8 @@ from PIL import Image
 # ────── 定数 ──────
 APP_DIR   = Path(__file__).parent
 DATA_FILE = APP_DIR / 'data' / 'problems.json'
-LABELS    = ['Ａ', 'Ｂ', 'Ｃ', 'Ｄ']
+LABELS           = ['Ａ', 'Ｂ', 'Ｃ', 'Ｄ']
+CHALLENGE_SIZES  = [2, 5, 10]   # チャレンジの問題数の選択肢
 
 
 # ────── データ読み込み ──────
@@ -140,7 +142,10 @@ def generate_question(pool: list[dict], mode: int, exam_type: str, spread: int) 
 def init_state():
     for k, v in {'score': 0, 'total': 0, 'question': None,
                  'answered': False, 'selected_idx': None, 'last_settings': None,
-                 'q_id': 0, 'selected_year_idx': None, 'selected_num': None}.items():
+                 'q_id': 0, 'selected_year_idx': None, 'selected_num': None,
+                 'question_start_time': None, 'elapsed_time': None,
+                 'challenge_phase': 'idle', 'challenge_n': CHALLENGE_SIZES[0],
+                 'challenge_results': [], 'challenge_q_num': 0}.items():
         if k not in st.session_state:
             st.session_state[k] = v
 
@@ -151,7 +156,39 @@ def reset_question():
     st.session_state.selected_idx = None
     st.session_state.selected_year_idx = None
     st.session_state.selected_num = None
+    st.session_state.question_start_time = None
+    st.session_state.elapsed_time = None
     st.session_state.q_id += 1  # フォームkeyを変えてradioの選択状態をリセット
+
+
+def advance_challenge():
+    """チャレンジモード：回答を記録して次の問題へ進む（最後なら結果画面へ）"""
+    qdata = st.session_state.question
+    q     = qdata['q']
+    qmode = qdata['mode']
+    choices = qdata.get('choices', [])
+
+    if qmode == 4:
+        sel_yi  = st.session_state.selected_year_idx
+        sel_n   = st.session_state.selected_num
+        correct = (qdata['year_choices'][sel_yi] == q['year'] and sel_n == q['number'])
+    else:
+        correct = choices[st.session_state.selected_idx]['correct']
+
+    st.session_state.challenge_results.append({
+        'q_num':   st.session_state.challenge_q_num,
+        'year':    q['year'],
+        'type':    q['type'],
+        'number':  q.get('number'),
+        'correct': correct,
+        'elapsed': st.session_state.elapsed_time or 0,
+    })
+
+    if st.session_state.challenge_q_num >= st.session_state.challenge_n:
+        st.session_state.challenge_phase = 'done'
+    else:
+        st.session_state.challenge_q_num += 1
+        reset_question()
 
 
 # ════════════════════════════════════════
@@ -181,132 +218,182 @@ def main():
         del st.session_state['_goto_quiz']
         st.session_state['_app_mode']       = '🎯 クイズ'
         st.session_state['_came_from_quiz'] = False
+        # チャレンジ進行中なら出題方式をチャレンジに復元
+        if st.session_state.get('challenge_phase', 'idle') != 'idle':
+            st.session_state['_practice_mode'] = 'チャレンジ'
 
     # ── サイドバー ──────────────────────
+    _in_challenge = st.session_state.get('challenge_phase') in ('running', 'done')
+
     with st.sidebar:
         st.markdown('# 📐 東大数学クイズ')
         st.caption('問題の年度・問番号を当てるトレーニング')
         st.divider()
 
-        def _on_app_mode_change():
-            st.session_state['_came_from_quiz'] = False
-
-        app_mode = st.radio('', ['🎯 クイズ', '📖 勉強'],
-                            horizontal=True, label_visibility='collapsed',
-                            key='_app_mode', on_change=_on_app_mode_change)
-        st.divider()
-
-        if app_mode == '🎯 クイズ':
-            mode = st.radio(
-                'クイズモード',
-                [1, 2, 3],
-                format_func=lambda x: (
-                    '① 問題を見て → 年度・問番号を当てる'
-                    if x == 1 else
-                    '② 年度・問番号を見て → 問題を選ぶ'
-                    if x == 2 else
-                    '③ 年度全体を見て → 年度を当てる'
-                ),
-            )
-            split_mode = False
-            if mode == 1:
-                split_mode = st.radio(
-                    '選択方式',
-                    ['セット（4択）', '別々（年度・問番号を分けて選ぶ）'],
-                    horizontal=True,
-                ) == '別々（年度・問番号を分けて選ぶ）'
-            exam_type = st.radio('種別', ['理系', '文系', '両方'])
-            year_range = st.slider('出題年度範囲', 1980, 2025, (1980, 2025))
-
+        if _in_challenge:
+            # チャレンジ中・サマリー中：最小限の表示のみ
+            cs    = st.session_state.get('_challenge_settings', {})
+            _n    = st.session_state.challenge_n
+            _phase = st.session_state.challenge_phase
+            if _phase == 'running':
+                _qnum = st.session_state.challenge_q_num
+                st.markdown(f'**🎯 {_n}問チャレンジ中**')
+                st.progress(_qnum / _n)
+                st.caption(f'第 {_qnum} / {_n} 問')
+            else:
+                st.markdown(f'**🏁 {_n}問チャレンジ 結果**')
             st.divider()
 
-            spread = st.slider(
-                '選択肢の年度幅　±N年以内',
-                min_value=1, max_value=45, value=45,
-            )
-            # 難易度表示
-            if spread <= 5:
-                st.caption('難易度：★★★　近い年度の問題が並ぶ')
-            elif spread <= 15:
-                st.caption('難易度：★★☆')
-            else:
-                st.caption('難易度：★☆☆　年度が離れた問題が並ぶ')
-
-            st.divider()
-            if st.session_state.total > 0:
-                pct = st.session_state.score / st.session_state.total * 100
-                st.metric('正答率', f'{pct:.0f}%',
-                          f'{st.session_state.score}/{st.session_state.total} 問正解')
-                st.progress(pct / 100)
-            else:
-                st.info('まだ出題されていません')
-
-            if st.button('🔄 スコアリセット', use_container_width=True):
-                st.session_state.score = 0
-                st.session_state.total = 0
+            def _end_challenge():
+                st.session_state.challenge_phase   = 'idle'
+                st.session_state.challenge_results = []
+                st.session_state.challenge_q_num   = 0
+                st.session_state.pop('_inline_study', None)
                 reset_question()
-                st.rerun()
+
+            if _phase == 'running':
+                st.button('⛔ チャレンジを終了する', on_click=_end_challenge,
+                          use_container_width=True)
+
+            # ウィジェットを描画しない代わりに、保存済み設定から変数を復元
+            app_mode      = '🎯 クイズ'
+            practice_mode = 'チャレンジ'
+            challenge_n   = cs.get('challenge_n', CHALLENGE_SIZES[0])
+            mode          = cs.get('mode', 1)
+            split_mode    = cs.get('split_mode', False)
+            exam_type     = cs.get('exam_type', '理系')
+            year_range    = cs.get('year_range', (1980, 2025))
+            spread        = cs.get('spread', 45)
 
         else:
-            # 勉強モード設定
-            study_type = st.radio('種別', ['理系', '文系'], key='_study_type')
-            _all_probs = load_problems()
-            study_years = sorted({p['year'] for p in _all_probs if p['type'] == study_type})
+            def _on_app_mode_change():
+                st.session_state['_came_from_quiz'] = False
 
-            # study_year_idx の初期化・クランプ
-            if 'study_year_idx' not in st.session_state:
-                st.session_state.study_year_idx = len(study_years) - 1
-            st.session_state.study_year_idx = max(
-                0, min(len(study_years) - 1, st.session_state.study_year_idx))
+            app_mode = st.radio('', ['🎯 クイズ', '📖 勉強'],
+                                horizontal=True, label_visibility='collapsed',
+                                key='_app_mode', on_change=_on_app_mode_change)
+            st.divider()
 
-            # ウィジェットキーの初期化・有効値チェック
-            for _k in ('_study_slider', '_study_select'):
-                if _k not in st.session_state or st.session_state[_k] not in study_years:
-                    st.session_state[_k] = study_years[st.session_state.study_year_idx]
+            if app_mode == '🎯 クイズ':
+                practice_mode = st.radio('出題方式', ['無限練習', 'チャレンジ'], horizontal=True,
+                                         key='_practice_mode')
+                challenge_n = CHALLENGE_SIZES[0]
+                if practice_mode == 'チャレンジ':
+                    challenge_n = st.radio('問題数', CHALLENGE_SIZES,
+                                           horizontal=True,
+                                           format_func=lambda x: f'{x}問')
 
-            # on_change コールバック（ここで study_years が参照できる）
-            def _sync_from_slider():
-                year = st.session_state['_study_slider']
-                if year in study_years:
-                    idx = study_years.index(year)
-                    st.session_state.study_year_idx = idx
-                    st.session_state['_study_select'] = year
+                st.divider()
+                mode = st.radio(
+                    'クイズモード',
+                    [1, 2, 3],
+                    format_func=lambda x: (
+                        '① 問題を見て → 年度・問番号を当てる'
+                        if x == 1 else
+                        '② 年度・問番号を見て → 問題を選ぶ'
+                        if x == 2 else
+                        '③ 年度全体を見て → 年度を当てる'
+                    ),
+                )
+                split_mode = False
+                if mode == 1:
+                    split_mode = st.radio(
+                        '選択方式',
+                        ['セット（4択）', '別々（年度・問番号を分けて選ぶ）'],
+                        horizontal=True,
+                    ) == '別々（年度・問番号を分けて選ぶ）'
+                exam_type = st.radio('種別', ['理系', '文系', '両方'])
+                year_range = st.slider('出題年度範囲', 1980, 2025, (1980, 2025))
 
-            def _sync_from_select():
-                year = st.session_state['_study_select']
-                if year in study_years:
-                    idx = study_years.index(year)
-                    st.session_state.study_year_idx = idx
-                    st.session_state['_study_slider'] = year
+                st.divider()
 
-            # 前/後ボタン
-            col_prev, col_next = st.columns(2)
-            with col_prev:
-                if st.button('◀ 前の年度', use_container_width=True,
-                             disabled=(st.session_state.study_year_idx == 0)):
-                    new_idx = st.session_state.study_year_idx - 1
-                    st.session_state.study_year_idx = new_idx
-                    st.session_state['_study_slider'] = study_years[new_idx]
-                    st.session_state['_study_select'] = study_years[new_idx]
-                    st.rerun()
-            with col_next:
-                if st.button('後の年度 ▶', use_container_width=True,
-                             disabled=(st.session_state.study_year_idx == len(study_years) - 1)):
-                    new_idx = st.session_state.study_year_idx + 1
-                    st.session_state.study_year_idx = new_idx
-                    st.session_state['_study_slider'] = study_years[new_idx]
-                    st.session_state['_study_select'] = study_years[new_idx]
-                    st.rerun()
+                spread = st.slider(
+                    '選択肢の年度幅　±N年以内',
+                    min_value=1, max_value=45, value=45,
+                )
+                if spread <= 5:
+                    st.caption('難易度：★★★　近い年度の問題が並ぶ')
+                elif spread <= 15:
+                    st.caption('難易度：★★☆')
+                else:
+                    st.caption('難易度：★☆☆　年度が離れた問題が並ぶ')
 
-            # スライダー
-            st.select_slider('年度スライダー', options=study_years,
-                             key='_study_slider', on_change=_sync_from_slider)
+                st.divider()
+                if practice_mode == '無限練習':
+                    if st.session_state.total > 0:
+                        pct = st.session_state.score / st.session_state.total * 100
+                        st.metric('正答率', f'{pct:.0f}%',
+                                  f'{st.session_state.score}/{st.session_state.total} 問正解')
+                        st.progress(pct / 100)
+                    else:
+                        st.info('まだ出題されていません')
 
-            # プルダウン
-            st.selectbox('年度を選ぶ', options=study_years,
-                         key='_study_select', on_change=_sync_from_select)
+                    if st.button('🔄 スコアリセット', use_container_width=True):
+                        st.session_state.score = 0
+                        st.session_state.total = 0
+                        reset_question()
+                        st.rerun()
 
-            study_year = study_years[st.session_state.study_year_idx]
+            else:
+                # 勉強モード設定
+                study_type = st.radio('種別', ['理系', '文系'], key='_study_type')
+                _all_probs = load_problems()
+                study_years = sorted({p['year'] for p in _all_probs if p['type'] == study_type})
+
+                # study_year_idx の初期化・クランプ
+                if 'study_year_idx' not in st.session_state:
+                    st.session_state.study_year_idx = len(study_years) - 1
+                st.session_state.study_year_idx = max(
+                    0, min(len(study_years) - 1, st.session_state.study_year_idx))
+
+                # ウィジェットキーの初期化・有効値チェック
+                for _k in ('_study_slider', '_study_select'):
+                    if _k not in st.session_state or st.session_state[_k] not in study_years:
+                        st.session_state[_k] = study_years[st.session_state.study_year_idx]
+
+                # on_change コールバック（ここで study_years が参照できる）
+                def _sync_from_slider():
+                    year = st.session_state['_study_slider']
+                    if year in study_years:
+                        idx = study_years.index(year)
+                        st.session_state.study_year_idx = idx
+                        st.session_state['_study_select'] = year
+
+                def _sync_from_select():
+                    year = st.session_state['_study_select']
+                    if year in study_years:
+                        idx = study_years.index(year)
+                        st.session_state.study_year_idx = idx
+                        st.session_state['_study_slider'] = year
+
+                # 前/後ボタン
+                col_prev, col_next = st.columns(2)
+                with col_prev:
+                    if st.button('◀ 前の年度', use_container_width=True,
+                                 disabled=(st.session_state.study_year_idx == 0)):
+                        new_idx = st.session_state.study_year_idx - 1
+                        st.session_state.study_year_idx = new_idx
+                        st.session_state['_study_slider'] = study_years[new_idx]
+                        st.session_state['_study_select'] = study_years[new_idx]
+                        st.rerun()
+                with col_next:
+                    if st.button('後の年度 ▶', use_container_width=True,
+                                 disabled=(st.session_state.study_year_idx == len(study_years) - 1)):
+                        new_idx = st.session_state.study_year_idx + 1
+                        st.session_state.study_year_idx = new_idx
+                        st.session_state['_study_slider'] = study_years[new_idx]
+                        st.session_state['_study_select'] = study_years[new_idx]
+                        st.rerun()
+
+                # スライダー
+                st.select_slider('年度スライダー', options=study_years,
+                                 key='_study_slider', on_change=_sync_from_slider)
+
+                # プルダウン
+                st.selectbox('年度を選ぶ', options=study_years,
+                             key='_study_select', on_change=_sync_from_select)
+
+                study_year = study_years[st.session_state.study_year_idx]
 
     # ── 問題プール ──────────────────────
     all_probs = load_problems()
@@ -342,6 +429,52 @@ def main():
             st.button('← クイズに戻る', key='_back_bottom', on_click=_back_to_quiz)
         return
 
+    # ── インライン勉強ビュー（チャレンジ中に年度確認） ──────────────
+    if st.session_state.get('_inline_study'):
+        inline = st.session_state['_inline_study']
+        i_year = inline['year']
+        i_type = inline['type']
+
+        def _back_inline():
+            del st.session_state['_inline_study']
+
+        st.button('← チャレンジに戻る', key='_inline_back_top', on_click=_back_inline)
+
+        i_all = load_problems()
+        i_years = sorted({p['year'] for p in i_all if p['type'] == i_type})
+        i_idx   = i_years.index(i_year) if i_year in i_years else 0
+
+        col_prev, col_title, col_next = st.columns([1, 3, 1])
+        with col_prev:
+            if st.button('◀ 前の年度', disabled=(i_idx == 0)):
+                st.session_state['_inline_study'] = {'year': i_years[i_idx - 1], 'type': i_type}
+                st.rerun()
+        with col_title:
+            st.markdown(f'## {i_year}年度　{i_type}')
+        with col_next:
+            if st.button('後の年度 ▶', disabled=(i_idx == len(i_years) - 1)):
+                st.session_state['_inline_study'] = {'year': i_years[i_idx + 1], 'type': i_type}
+                st.rerun()
+
+        st.divider()
+        i_probs = sorted(
+            [p for p in i_all if p['type'] == i_type and p['year'] == i_year],
+            key=lambda p: p['number'],
+        )
+        if not i_probs:
+            st.warning('該当する問題が見つかりません。')
+        else:
+            mid = (len(i_probs) + 1) // 2
+            col_l, col_r = st.columns(2)
+            for col, probs in [(col_l, i_probs[:mid]), (col_r, i_probs[mid:])]:
+                with col:
+                    for p in probs:
+                        st.subheader(f'第{p["number"]}問')
+                        st.image(load_image(p), use_container_width=True)
+                        st.divider()
+        st.button('← チャレンジに戻る', key='_inline_back_bottom', on_click=_back_inline)
+        return
+
     pool = filter_problems(all_probs, exam_type, year_range[0], year_range[1])
 
     if mode == 3:
@@ -353,11 +486,88 @@ def main():
             st.error('問題が不足しています。年度範囲や種別を広げてください。')
             return
 
-    # 設定変更時はリセット
-    cur_settings = (mode, split_mode, exam_type, year_range, spread)
-    if st.session_state.last_settings != cur_settings:
+    # 設定変更時はリセット（サマリー表示中は変更を無視する）
+    cur_settings = (mode, split_mode, exam_type, year_range, spread, practice_mode, challenge_n)
+    if (st.session_state.last_settings != cur_settings
+            and st.session_state.challenge_phase != 'done'):
         st.session_state.last_settings = cur_settings
+        st.session_state.challenge_phase   = 'idle'
+        st.session_state.challenge_results = []
+        st.session_state.challenge_q_num   = 0
         reset_question()
+
+    # ── チャレンジモード画面分岐 ──────────────────────
+    if practice_mode == 'チャレンジ':
+        if st.session_state.challenge_phase == 'idle':
+            st.markdown(f'# 🎯 {challenge_n}問チャレンジ')
+            st.divider()
+            mode_label = {1: '① 問題を見て → 年度・問番号を当てる',
+                          2: '② 年度・問番号を見て → 問題を選ぶ',
+                          3: '③ 年度全体を見て → 年度を当てる'}.get(mode, '')
+            st.markdown(f'**クイズモード**: {mode_label}')
+            st.markdown(f'**種別**: {exam_type}　**年度範囲**: {year_range[0]}〜{year_range[1]}年度')
+            st.divider()
+            if st.button(f'▶ {challenge_n}問チャレンジ スタート',
+                         type='primary', use_container_width=True):
+                st.session_state.challenge_phase   = 'running'
+                st.session_state.challenge_q_num   = 1
+                st.session_state.challenge_results = []
+                st.session_state.challenge_n       = challenge_n
+                st.session_state['_challenge_settings'] = {
+                    'mode': mode, 'split_mode': split_mode,
+                    'exam_type': exam_type, 'year_range': year_range,
+                    'spread': spread, 'challenge_n': challenge_n,
+                }
+                reset_question()
+                st.rerun()
+            return
+
+        elif st.session_state.challenge_phase == 'done':
+            results = st.session_state.challenge_results
+            n       = st.session_state.challenge_n
+            total_correct = sum(1 for r in results if r['correct'])
+            total_time    = sum(r['elapsed'] for r in results)
+
+            st.markdown(f'# 🏁 {n}問チャレンジ 結果')
+            st.divider()
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric('正解数', f'{total_correct} / {n}')
+            with col2:
+                st.metric('合計タイム', f'{total_time:.1f} 秒')
+            st.divider()
+
+            for r in results:
+                icon = '✅' if r['correct'] else '❌'
+                st.markdown(
+                    f'**第{r["q_num"]}問** {icon}　'
+                    f'{r["year"]}年度'
+                    + (f' 第{r["number"]}問' if r["number"] is not None else '')
+                    + f'（{r["type"]}）　'
+                    f'⏱ {r["elapsed"]:.1f}秒'
+                )
+            st.divider()
+
+            def _retry_challenge():
+                # 同じ設定で即座に再スタート（runningに戻すだけでOK）
+                st.session_state.challenge_phase   = 'running'
+                st.session_state.challenge_q_num   = 1
+                st.session_state.challenge_results = []
+                reset_question()
+
+            def _back_to_top():
+                # チャレンジ設定画面（idle）に戻る
+                st.session_state.challenge_phase   = 'idle'
+                st.session_state.challenge_results = []
+                st.session_state.challenge_q_num   = 0
+                st.session_state['_practice_mode'] = 'チャレンジ'
+                reset_question()
+
+            st.button(f'🔄 もう一度 {n}問チャレンジ', on_click=_retry_challenge,
+                      type='primary', use_container_width=True)
+            st.button('🏠 トップページに戻る', on_click=_back_to_top,
+                      use_container_width=True)
+            return
 
     # 新しい問題を生成
     if st.session_state.question is None:
@@ -367,6 +577,7 @@ def main():
             st.session_state.question = generate_split_question(pool, exam_type, spread)
         else:
             st.session_state.question = generate_question(pool, mode, exam_type, spread)
+        st.session_state.question_start_time = time.time()
 
     qdata   = st.session_state.question
     q       = qdata['q']
@@ -377,7 +588,12 @@ def main():
     # ── ヘッダー ──────────────────────
     col_title, col_score = st.columns([3, 1])
     with col_title:
-        st.markdown('# 東大数学 問題識別クイズ')
+        if practice_mode == 'チャレンジ':
+            n = st.session_state.challenge_n
+            q_num = st.session_state.challenge_q_num
+            st.markdown(f'# 🎯 第{q_num}問 / 全{n}問')
+        else:
+            st.markdown('# 東大数学 問題識別クイズ')
     with col_score:
         if st.session_state.total > 0:
             st.metric('正解数',
@@ -421,6 +637,7 @@ def main():
                 st.warning('選択肢を選んでから「答え合わせ」を押してください。')
                 st.stop()
         if submitted and sel is not None and not st.session_state.answered:
+            st.session_state.elapsed_time = time.time() - st.session_state.question_start_time
             st.session_state.selected_idx = sel
             st.session_state.answered = True
             if choices[sel]['correct']:
@@ -470,6 +687,7 @@ def main():
                 st.warning('選択肢を選んでから「答え合わせ」を押してください。')
                 st.stop()
         if submitted and sel is not None and not st.session_state.answered:
+            st.session_state.elapsed_time = time.time() - st.session_state.question_start_time
             st.session_state.selected_idx = sel
             st.session_state.answered = True
             if choices[sel]['correct']:
@@ -517,6 +735,7 @@ def main():
                 st.warning('選択肢を選んでから「答え合わせ」を押してください。')
                 st.stop()
         if submitted and sel is not None and not st.session_state.answered:
+            st.session_state.elapsed_time = time.time() - st.session_state.question_start_time
             st.session_state.selected_idx = sel
             st.session_state.answered = True
             if choices[sel]['correct']:
@@ -569,6 +788,7 @@ def main():
                 st.warning('年度と問番号の両方を選んでから「答え合わせ」を押してください。')
                 st.stop()
         if submitted and sel_year is not None and sel_num is not None and not st.session_state.answered:
+            st.session_state.elapsed_time      = time.time() - st.session_state.question_start_time
             st.session_state.selected_year_idx = sel_year
             st.session_state.selected_num      = sel_num
             st.session_state.answered = True
@@ -629,17 +849,33 @@ def main():
                         f'正解：{LABELS[correct_idx]}　{q["year"]}年度'
                     )
 
+        # 回答時間
+        if st.session_state.elapsed_time is not None:
+            st.caption(f'⏱ 回答時間: {st.session_state.elapsed_time:.1f} 秒')
+
         # この年度の全問題を勉強モードで見るボタン
         study_year_val = q['year']
         study_type_val = q['type']
         if st.button(f'📖 {study_year_val}年度（{study_type_val}）の全問題を見る',
                      use_container_width=True):
-            # widget描画後にwidgetキーを直接変更できないため、
-            # 次のrun開始時（widget描画前）に処理するフラグを立てる
-            st.session_state['_goto_study'] = {'year': study_year_val, 'type': study_type_val}
+            if practice_mode == 'チャレンジ':
+                # チャレンジ中はサイドバーをそのままにしてインライン表示
+                st.session_state['_inline_study'] = {'year': study_year_val, 'type': study_type_val}
+            else:
+                # 無限練習は通常の勉強モードへ遷移
+                st.session_state['_goto_study'] = {'year': study_year_val, 'type': study_type_val}
             st.rerun()
 
-        st.button('次の問題へ →', on_click=reset_question, type='primary', use_container_width=True)
+        if practice_mode == 'チャレンジ':
+            q_num = st.session_state.challenge_q_num
+            n     = st.session_state.challenge_n
+            btn_label = (f'次の問題へ → （{q_num + 1} / {n} 問目）'
+                         if q_num < n else '結果を見る →')
+            st.button(btn_label, on_click=advance_challenge,
+                      type='primary', use_container_width=True)
+        else:
+            st.button('次の問題へ →', on_click=reset_question,
+                      type='primary', use_container_width=True)
 
 
 if __name__ == '__main__':
