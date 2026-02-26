@@ -398,8 +398,23 @@ def main():
     # ── 問題プール ──────────────────────
     all_probs = load_problems()
 
+    _STUDY_CSS = """
+    <style>
+    .stMainBlockContainer, .block-container {
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+        max-width: 100% !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"] > div {
+        padding: 0.125rem !important;
+        gap: 0.125rem !important;
+    }
+    </style>
+    """
+
     # ── 勉強モード（早期リターン） ──────────────────────
     if app_mode == '📖 勉強':
+        st.markdown(_STUDY_CSS, unsafe_allow_html=True)
         def _back_to_quiz():
             st.session_state['_goto_quiz'] = True
 
@@ -421,16 +436,17 @@ def main():
             for col, probs in [(col_l, study_probs[:mid]), (col_r, study_probs[mid:])]:
                 with col:
                     for p in probs:
-                        st.subheader(f'第{p["number"]}問')
-                        img = load_image(p)
-                        st.image(img, use_container_width=True)
-                        st.divider()
+                        with st.container(border=True):
+                            st.subheader(f'第{p["number"]}問')
+                            img = load_image(p)
+                            st.image(img, use_container_width=True)
         if came_from_quiz:
             st.button('← クイズに戻る', key='_back_bottom', on_click=_back_to_quiz)
         return
 
     # ── インライン勉強ビュー（チャレンジ中に年度確認） ──────────────
     if st.session_state.get('_inline_study'):
+        st.markdown(_STUDY_CSS, unsafe_allow_html=True)
         inline = st.session_state['_inline_study']
         i_year = inline['year']
         i_type = inline['type']
@@ -469,9 +485,9 @@ def main():
             for col, probs in [(col_l, i_probs[:mid]), (col_r, i_probs[mid:])]:
                 with col:
                     for p in probs:
-                        st.subheader(f'第{p["number"]}問')
-                        st.image(load_image(p), use_container_width=True)
-                        st.divider()
+                        with st.container(border=True):
+                            st.subheader(f'第{p["number"]}問')
+                            st.image(load_image(p), use_container_width=True)
         st.button('← チャレンジに戻る', key='_inline_back_bottom', on_click=_back_inline)
         return
 
@@ -599,7 +615,6 @@ def main():
             st.metric('正解数',
                       f'{st.session_state.score} / {st.session_state.total}',
                       f'{st.session_state.score/st.session_state.total*100:.0f}%')
-    st.divider()
 
     # ════════════════════════════════════
     if qmode == 1:
@@ -609,10 +624,9 @@ def main():
             st.caption(f'種別: {q["type"]}')
 
         # 問題画像（全幅）
-        img = load_image(q)
-        st.image(img, use_container_width=True)
-
-        st.divider()
+        with st.container(border=True):
+            img = load_image(q)
+            st.image(img, use_container_width=True)
 
         # 4択フォーム
         # ※ st.form内でradio選択してもrereunされないため、
@@ -650,7 +664,6 @@ def main():
         # ── モード②: 年度・問番号 → 4択の問題画像 ──
         st.subheader('❓ 次の問題の問題文はどれでしょう？')
         st.markdown(f'## {q["year"]}年度　第{q["number"]}問　【{q["type"]}】')
-        st.divider()
 
         # 4問を 2×2 グリッドで表示
         row1 = st.columns(2)
@@ -659,11 +672,10 @@ def main():
 
         for i, (col, c) in enumerate(zip(grid, choices)):
             with col:
-                st.markdown(f'### {LABELS[i]}')
-                img = load_image(c['prob'])
-                st.image(img, use_container_width=True)
-
-        st.divider()
+                with st.container(border=True):
+                    st.markdown(f'### {LABELS[i]}')
+                    img = load_image(c['prob'])
+                    st.image(img, use_container_width=True)
 
         # 選択フォーム
         with st.form(f'quiz_form_{st.session_state.q_id}'):
@@ -710,10 +722,9 @@ def main():
         for col, probs in [(col_l, year_probs[:mid]), (col_r, year_probs[mid:])]:
             with col:
                 for p in probs:
-                    st.subheader(f'第{p["number"]}問')
-                    st.image(load_image(p), use_container_width=True)
-
-        st.divider()
+                    with st.container(border=True):
+                        st.subheader(f'第{p["number"]}問')
+                        st.image(load_image(p), use_container_width=True)
 
         with st.form(f'quiz_form_{st.session_state.q_id}'):
             sel = st.radio(
@@ -753,10 +764,9 @@ def main():
         if show_t:
             st.caption(f'種別: {q["type"]}')
 
-        img = load_image(q)
-        st.image(img, use_container_width=True)
-
-        st.divider()
+        with st.container(border=True):
+            img = load_image(q)
+            st.image(img, use_container_width=True)
 
         with st.form(f'quiz_form_{st.session_state.q_id}'):
             col_y, col_n = st.columns(2)
