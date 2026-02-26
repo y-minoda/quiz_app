@@ -423,7 +423,6 @@ def main():
             st.button('← クイズに戻る', key='_back_top', on_click=_back_to_quiz)
         st.markdown('# 📖 勉強モード')
         st.markdown(f'## {study_year}年度　{study_type}')
-        st.divider()
         study_probs = sorted(
             [p for p in all_probs if p['type'] == study_type and p['year'] == study_year],
             key=lambda p: p['number'],
@@ -472,7 +471,6 @@ def main():
                 st.session_state['_inline_study'] = {'year': i_years[i_idx + 1], 'type': i_type}
                 st.rerun()
 
-        st.divider()
         i_probs = sorted(
             [p for p in i_all if p['type'] == i_type and p['year'] == i_year],
             key=lambda p: p['number'],
