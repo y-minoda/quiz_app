@@ -171,7 +171,8 @@ def main():
         st.divider()
 
         app_mode = st.radio('', ['🎯 クイズ', '📖 勉強'],
-                            horizontal=True, label_visibility='collapsed')
+                            horizontal=True, label_visibility='collapsed',
+                            key='_app_mode')
         st.divider()
 
         if app_mode == '🎯 クイズ':
@@ -227,7 +228,7 @@ def main():
 
         else:
             # 勉強モード設定
-            study_type = st.radio('種別', ['理系', '文系'])
+            study_type = st.radio('種別', ['理系', '文系'], key='_study_type')
             _all_probs = load_problems()
             study_years = sorted({p['year'] for p in _all_probs if p['type'] == study_type})
 
@@ -598,6 +599,21 @@ def main():
                         f'あなたの答え：{LABELS[sel_idx]}　{choices[sel_idx]["year"]}年度\n\n'
                         f'正解：{LABELS[correct_idx]}　{q["year"]}年度'
                     )
+
+        # この年度の全問題を勉強モードで見るボタン
+        study_year_val  = q['year']
+        study_type_val  = q['type']
+        if st.button(f'📖 {study_year_val}年度（{study_type_val}）の全問題を見る',
+                     use_container_width=True):
+            _all = load_problems()
+            s_years = sorted({p['year'] for p in _all if p['type'] == study_type_val})
+            idx = s_years.index(study_year_val) if study_year_val in s_years else len(s_years) - 1
+            st.session_state['_app_mode']    = '📖 勉強'
+            st.session_state['_study_type']  = study_type_val
+            st.session_state.study_year_idx  = idx
+            st.session_state['_study_slider'] = study_year_val
+            st.session_state['_study_select'] = study_year_val
+            st.rerun()
 
         st.button('次の問題へ →', on_click=reset_question, type='primary', use_container_width=True)
 
