@@ -194,7 +194,7 @@ def advance_challenge():
 # ════════════════════════════════════════
 def main():
     st.set_page_config(
-        page_title='東大数学問題集',
+        page_title='東大数学問題問題集',
         page_icon='📐',
         layout='wide',
         initial_sidebar_state='expanded',
@@ -226,7 +226,7 @@ def main():
     _in_challenge = st.session_state.get('challenge_phase') in ('running', 'done')
 
     with st.sidebar:
-        st.markdown('# 📐 東大数学問題集')
+        st.markdown('# 📐 東大数学問題問題集')
         st.caption('問題の年度・問番号を当てるトレーニング')
         st.divider()
 
