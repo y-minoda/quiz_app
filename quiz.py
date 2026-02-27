@@ -14,7 +14,7 @@ from PIL import Image
 APP_DIR   = Path(__file__).parent
 DATA_FILE = APP_DIR / 'data' / 'problems.json'
 LABELS           = ['Ａ', 'Ｂ', 'Ｃ', 'Ｄ']
-CHALLENGE_SIZES  = [2, 5, 10]   # チャレンジの問題数の選択肢
+CHALLENGE_MAX = 20   # チャレンジの最大問題数
 
 
 # ────── データ読み込み ──────
@@ -144,7 +144,7 @@ def init_state():
                  'answered': False, 'selected_idx': None, 'last_settings': None,
                  'q_id': 0, 'selected_year_idx': None, 'selected_num': None,
                  'question_start_time': None, 'elapsed_time': None,
-                 'challenge_phase': 'idle', 'challenge_n': CHALLENGE_SIZES[0],
+                 'challenge_phase': 'idle', 'challenge_n': 5,
                  'challenge_results': [], 'challenge_q_num': 0}.items():
         if k not in st.session_state:
             st.session_state[k] = v
@@ -293,7 +293,7 @@ def main():
             # ウィジェットを描画しない代わりに、保存済み設定から変数を復元
             app_mode      = '🎯 クイズ'
             practice_mode = 'チャレンジ'
-            challenge_n   = cs.get('challenge_n', CHALLENGE_SIZES[0])
+            challenge_n   = cs.get('challenge_n', 5)
             mode          = cs.get('mode', 1)
             split_mode    = cs.get('split_mode', False)
             exam_type     = cs.get('exam_type', '理系')
@@ -315,12 +315,12 @@ def main():
                 st.markdown(_sp, unsafe_allow_html=True)
                 practice_mode = st.radio('出題方式', ['無限練習', 'チャレンジ'], horizontal=True,
                                          key='_practice_mode')
-                challenge_n = CHALLENGE_SIZES[0]
+                challenge_n = 5
                 if practice_mode == 'チャレンジ':
                     st.markdown(_hr, unsafe_allow_html=True)
-                    challenge_n = st.radio('問題数', CHALLENGE_SIZES,
-                                           horizontal=True,
-                                           format_func=lambda x: f'{x}問')
+                    challenge_n = st.slider('問題数', min_value=1, max_value=CHALLENGE_MAX,
+                                            value=st.session_state.get('challenge_n', 5),
+                                            format='%d問')
 
                 st.markdown('<hr style="margin:0.1rem 0 1.0rem 0;border:none;border-top:1px solid rgba(49,51,63,0.2)">', unsafe_allow_html=True)
                 st.markdown(_sp, unsafe_allow_html=True)
