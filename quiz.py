@@ -207,14 +207,27 @@ def main():
     /* 左右ページの一番上の余白を大胆に縮小（複数セレクタで確実に） */
     section[data-testid="stSidebar"] > div:first-child,
     section[data-testid="stSidebar"] > div:first-child > div:first-child,
-    [data-testid="stSidebarUserContent"] { padding-top: 0.2rem !important; }
-    .stMainBlockContainer, .block-container { padding-top: 0.2rem !important; }
+    [data-testid="stSidebarUserContent"] { padding-top: 0rem !important; }
+    .stMainBlockContainer, .block-container { padding-top: 4rem !important; }
     /* 全体的な縦余白 */
     .stVerticalBlock { gap: 0.35rem !important; }
     /* サイドバー内の縦余白をさらに詰める */
     section[data-testid="stSidebar"] .stVerticalBlock { gap: 0.15rem !important; }
     /* ラジオボタン自体の上下マージンを詰める */
     section[data-testid="stSidebar"] .stRadio { margin-top: 0 !important; margin-bottom: 0 !important; }
+    /* サイドバータイトルの上マージンを負に */
+    section[data-testid="stSidebar"] h1 { margin-top: -1rem !important; }
+    /* stSidebarUserContent 直下の最初のブロックも上に引き上げ */
+    [data-testid="stSidebarUserContent"] > div:first-child { margin-top: -2rem !important; }
+    /* ラジオ・スライダーラベル：太字＋下スペースを詰める */
+    /* 横並びラジオ：少し詰める */
+    section[data-testid="stSidebar"] .stRadio:has([data-testid="stHorizontalBlock"]) > label { font-weight: 800 !important; padding-bottom: 0 !important; margin-bottom: -0.3rem !important; }
+    /* 縦並びラジオ：少し広め */
+    section[data-testid="stSidebar"] .stRadio:not(:has([data-testid="stHorizontalBlock"])) > label { font-weight: 800 !important; padding-bottom: 0 !important; margin-bottom: 0rem !important; }
+    section[data-testid="stSidebar"] .stSlider > label { font-weight: 800 !important; padding-bottom: 0 !important; margin-bottom: 0.5rem !important; }
+    section[data-testid="stSidebar"] .stRadio > label p,
+    section[data-testid="stSidebar"] .stSlider > label p { font-weight: 800 !important; }
+    section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] { padding-bottom: 0 !important; margin-bottom: 0 !important; }
     /* 枠内パディング */
     [data-testid="stVerticalBlockBorderWrapper"] > div {
         padding: 0.125rem !important;
@@ -250,7 +263,7 @@ def main():
     with st.sidebar:
         st.markdown('# 📐 東大数学問題問題集')
         st.caption('問題の年度・問番号を当てるトレーニング')
-        st.divider()
+        st.markdown('<hr style="margin:0.5rem 0 1.0rem 0;border:none;border-top:1px solid rgba(49,51,63,0.2)">', unsafe_allow_html=True)
 
         if _in_challenge:
             # チャレンジ中・サマリー中：最小限の表示のみ
@@ -264,7 +277,7 @@ def main():
                 st.caption(f'第 {_qnum} / {_n} 問')
             else:
                 st.markdown(f'**🏁 {_n}問チャレンジ 結果**')
-            st.divider()
+            st.markdown('<hr style="margin:0.6rem 0 0.6rem 0;border:none;border-top:1px solid rgba(49,51,63,0.2)">', unsafe_allow_html=True)
 
             def _end_challenge():
                 st.session_state.challenge_phase   = 'idle'
@@ -294,18 +307,23 @@ def main():
             app_mode = st.radio('', ['🎯 クイズ', '📖 年度別表示'],
                                 horizontal=True, label_visibility='collapsed',
                                 key='_app_mode', on_change=_on_app_mode_change)
-            st.divider()
+            st.markdown('<hr style="margin:0.4rem 0 1.0rem 0;border:none;border-top:1px solid rgba(49,51,63,0.2)">', unsafe_allow_html=True)
 
             if app_mode == '🎯 クイズ':
+                _sp = '<div style="height:0.4rem"></div>'
+                _hr = '<hr style="margin:0.4rem 0 1.2rem 0;border:none;border-top:1px solid rgba(49,51,63,0.2)">'
+                st.markdown(_sp, unsafe_allow_html=True)
                 practice_mode = st.radio('出題方式', ['無限練習', 'チャレンジ'], horizontal=True,
                                          key='_practice_mode')
                 challenge_n = CHALLENGE_SIZES[0]
                 if practice_mode == 'チャレンジ':
+                    st.markdown(_hr, unsafe_allow_html=True)
                     challenge_n = st.radio('問題数', CHALLENGE_SIZES,
                                            horizontal=True,
                                            format_func=lambda x: f'{x}問')
 
-                st.divider()
+                st.markdown('<hr style="margin:0.1rem 0 1.0rem 0;border:none;border-top:1px solid rgba(49,51,63,0.2)">', unsafe_allow_html=True)
+                st.markdown(_sp, unsafe_allow_html=True)
                 mode = st.radio(
                     'クイズモード',
                     [1, 2, 3],
@@ -319,16 +337,19 @@ def main():
                 )
                 split_mode = False
                 if mode == 1:
+                    st.markdown(_hr, unsafe_allow_html=True)
                     split_mode = st.radio(
                         '選択方式',
                         ['セット（4択）', '別々（年度・問番号を分けて選ぶ）'],
                         horizontal=True,
                     ) == '別々（年度・問番号を分けて選ぶ）'
-                exam_type = st.radio('種別', ['理系', '文系', '両方'])
+                st.markdown(_hr, unsafe_allow_html=True)
+                exam_type = st.radio('種別', ['理系', '文系', '両方'], horizontal=True)
+                st.markdown(_hr, unsafe_allow_html=True)
                 year_range = st.slider('出題年度範囲', 1980, 2025, (1980, 2025))
 
-                st.divider()
-
+                st.markdown('<hr style="margin:0.4rem 0 1.0rem 0;border:none;border-top:1px solid rgba(49,51,63,0.2)">', unsafe_allow_html=True)
+                st.markdown(_sp, unsafe_allow_html=True)
                 spread = st.slider(
                     '選択肢の年度幅　±N年以内',
                     min_value=1, max_value=45, value=45,
@@ -340,7 +361,7 @@ def main():
                 else:
                     st.caption('難易度：★☆☆　年度が離れた問題が並ぶ')
 
-                st.divider()
+                st.markdown('<hr style="margin:0.4rem 0 1.4rem 0;border:none;border-top:1px solid rgba(49,51,63,0.2)">', unsafe_allow_html=True)
                 if practice_mode == '無限練習':
                     if st.session_state.total > 0:
                         pct = st.session_state.score / st.session_state.total * 100
@@ -423,6 +444,7 @@ def main():
     _STUDY_CSS = """
     <style>
     .stMainBlockContainer, .block-container {
+        padding-top: 2.5rem !important;
         padding-left: 2rem !important;
         padding-right: 2rem !important;
         max-width: 100% !important;
