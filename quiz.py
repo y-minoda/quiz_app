@@ -201,13 +201,35 @@ def main():
     )
     init_state()
 
+    # グローバルCSS：縦余白・枠内パディングを縮小
+    st.markdown("""
+    <style>
+    /* 左右ページの一番上の余白を大胆に縮小（複数セレクタで確実に） */
+    section[data-testid="stSidebar"] > div:first-child,
+    section[data-testid="stSidebar"] > div:first-child > div:first-child,
+    [data-testid="stSidebarUserContent"] { padding-top: 0.2rem !important; }
+    .stMainBlockContainer, .block-container { padding-top: 0.2rem !important; }
+    /* 全体的な縦余白 */
+    .stVerticalBlock { gap: 0.35rem !important; }
+    /* サイドバー内の縦余白をさらに詰める */
+    section[data-testid="stSidebar"] .stVerticalBlock { gap: 0.15rem !important; }
+    /* ラジオボタン自体の上下マージンを詰める */
+    section[data-testid="stSidebar"] .stRadio { margin-top: 0 !important; margin-bottom: 0 !important; }
+    /* 枠内パディング */
+    [data-testid="stVerticalBlockBorderWrapper"] > div {
+        padding: 0.125rem !important;
+        gap: 0.125rem !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     # 勉強モードへのナビゲーション（widget描画前に処理する必要がある）
     if st.session_state.get('_goto_study'):
         goto = st.session_state.pop('_goto_study')
         _all = load_problems()
         s_years = sorted({p['year'] for p in _all if p['type'] == goto['type']})
         idx = s_years.index(goto['year']) if goto['year'] in s_years else len(s_years) - 1
-        st.session_state['_app_mode']       = '📖 勉強'
+        st.session_state['_app_mode']       = '📖 年度別表示'
         st.session_state['_study_type']     = goto['type']
         st.session_state.study_year_idx     = idx
         st.session_state['_study_slider']   = goto['year']
@@ -269,7 +291,7 @@ def main():
             def _on_app_mode_change():
                 st.session_state['_came_from_quiz'] = False
 
-            app_mode = st.radio('', ['🎯 クイズ', '📖 勉強'],
+            app_mode = st.radio('', ['🎯 クイズ', '📖 年度別表示'],
                                 horizontal=True, label_visibility='collapsed',
                                 key='_app_mode', on_change=_on_app_mode_change)
             st.divider()
@@ -405,15 +427,11 @@ def main():
         padding-right: 2rem !important;
         max-width: 100% !important;
     }
-    [data-testid="stVerticalBlockBorderWrapper"] > div {
-        padding: 0.125rem !important;
-        gap: 0.125rem !important;
-    }
     </style>
     """
 
     # ── 勉強モード（早期リターン） ──────────────────────
-    if app_mode == '📖 勉強':
+    if app_mode == '📖 年度別表示':
         st.markdown(_STUDY_CSS, unsafe_allow_html=True)
         def _back_to_quiz():
             st.session_state['_goto_quiz'] = True
@@ -421,7 +439,6 @@ def main():
         came_from_quiz = st.session_state.get('_came_from_quiz')
         if came_from_quiz:
             st.button('← クイズに戻る', key='_back_top', on_click=_back_to_quiz)
-        st.markdown('# 📖 勉強モード')
         st.markdown(f'## {study_year}年度　{study_type}')
         study_probs = sorted(
             [p for p in all_probs if p['type'] == study_type and p['year'] == study_year],
@@ -436,7 +453,7 @@ def main():
                 with col:
                     for p in probs:
                         with st.container(border=True):
-                            st.subheader(f'第{p["number"]}問')
+                            st.markdown(f'**第{p["number"]}問**')
                             img = load_image(p)
                             st.image(img, use_container_width=True)
         if came_from_quiz:
@@ -484,7 +501,7 @@ def main():
                 with col:
                     for p in probs:
                         with st.container(border=True):
-                            st.subheader(f'第{p["number"]}問')
+                            st.markdown(f'**第{p["number"]}問**')
                             st.image(load_image(p), use_container_width=True)
         st.button('← チャレンジに戻る', key='_inline_back_bottom', on_click=_back_inline)
         return
@@ -600,24 +617,15 @@ def main():
     show_t  = qdata['show_type']
 
     # ── ヘッダー ──────────────────────
-    col_title, col_score = st.columns([3, 1])
-    with col_title:
-        if practice_mode == 'チャレンジ':
-            n = st.session_state.challenge_n
-            q_num = st.session_state.challenge_q_num
-            st.markdown(f'# 🎯 第{q_num}問 / 全{n}問')
-        else:
-            pass
-    with col_score:
-        if st.session_state.total > 0:
-            st.metric('正解数',
-                      f'{st.session_state.score} / {st.session_state.total}',
-                      f'{st.session_state.score/st.session_state.total*100:.0f}%')
+    if practice_mode == 'チャレンジ':
+        n = st.session_state.challenge_n
+        q_num = st.session_state.challenge_q_num
+        st.markdown(f'# 🎯 第{q_num}問 / 全{n}問')
 
     # ════════════════════════════════════
     if qmode == 1:
         # ── モード①: 問題画像 → 年度・問番号 ──
-        st.subheader('❓ この問題は何年度の第何問でしょう？')
+        st.markdown('**❓ この問題は何年度の第何問でしょう？**')
         if show_t:
             st.caption(f'種別: {q["type"]}')
 
@@ -626,28 +634,21 @@ def main():
             img = load_image(q)
             st.image(img, use_container_width=True)
 
-        # 4択フォーム
-        # ※ st.form内でradio選択してもrereunされないため、
-        #   submit buttonのdisabledはst.session_state.answeredのみで判定する
-        with st.form(f'quiz_form_{st.session_state.q_id}'):
-            sel = st.radio(
-                '年度と問番号を選んでください：',
-                options=range(len(choices)),
-                format_func=lambda i: f'{LABELS[i]}　　{choices[i]["label"]}',
-                index=None,
-                disabled=st.session_state.answered,
-            )
-            submitted = st.form_submit_button(
-                '✅ 答え合わせ',
-                type='primary',
-                disabled=st.session_state.answered,
-                use_container_width=True,
-            )
-
-        if submitted and not st.session_state.answered:
-            if sel is None:
-                st.warning('選択肢を選んでから「答え合わせ」を押してください。')
-                st.stop()
+        sel = st.radio(
+            '年度と問番号',
+            options=range(len(choices)),
+            format_func=lambda i: f'{LABELS[i]}　　{choices[i]["label"]}',
+            index=None,
+            key=f'radio_{st.session_state.q_id}',
+            disabled=st.session_state.answered,
+            label_visibility='collapsed',
+        )
+        submitted = st.button(
+            '✅ 答え合わせ',
+            type='primary',
+            disabled=st.session_state.answered or sel is None,
+            use_container_width=True,
+        )
         if submitted and sel is not None and not st.session_state.answered:
             st.session_state.elapsed_time = time.time() - st.session_state.question_start_time
             st.session_state.selected_idx = sel
@@ -660,7 +661,7 @@ def main():
     # ════════════════════════════════════
     elif qmode == 2:
         # ── モード②: 年度・問番号 → 4択の問題画像 ──
-        st.subheader('❓ 次の問題の問題文はどれでしょう？')
+        st.markdown('**❓ 次の問題の問題文はどれでしょう？**')
         st.markdown(f'## {q["year"]}年度　第{q["number"]}問　【{q["type"]}】')
 
         # 4問を 2×2 グリッドで表示
@@ -675,27 +676,21 @@ def main():
                     img = load_image(c['prob'])
                     st.image(img, use_container_width=True)
 
-        # 選択フォーム
-        with st.form(f'quiz_form_{st.session_state.q_id}'):
-            sel = st.radio(
-                '正しい問題文を選んでください：',
-                options=range(len(choices)),
-                format_func=lambda i: LABELS[i],
-                index=None,
-                horizontal=True,
-                disabled=st.session_state.answered,
-            )
-            submitted = st.form_submit_button(
-                '✅ 答え合わせ',
-                type='primary',
-                disabled=st.session_state.answered,
-                use_container_width=True,
-            )
-
-        if submitted and not st.session_state.answered:
-            if sel is None:
-                st.warning('選択肢を選んでから「答え合わせ」を押してください。')
-                st.stop()
+        sel = st.radio(
+            '正しい問題文を選んでください：',
+            options=range(len(choices)),
+            format_func=lambda i: LABELS[i],
+            index=None,
+            horizontal=True,
+            key=f'radio_{st.session_state.q_id}',
+            disabled=st.session_state.answered,
+        )
+        submitted = st.button(
+            '✅ 答え合わせ',
+            type='primary',
+            disabled=st.session_state.answered or sel is None,
+            use_container_width=True,
+        )
         if submitted and sel is not None and not st.session_state.answered:
             st.session_state.elapsed_time = time.time() - st.session_state.question_start_time
             st.session_state.selected_idx = sel
@@ -708,7 +703,7 @@ def main():
     # ════════════════════════════════════
     elif qmode == 3:
         # ── モード③: 年度全体の問題一覧 → 年度を当てる ──
-        st.subheader('❓ この年度全体の問題は何年度でしょう？')
+        st.markdown('**❓ この年度全体の問題は何年度でしょう？**')
         st.caption(f'種別: {q["type"]}')
 
         year_probs = sorted(
@@ -721,28 +716,23 @@ def main():
             with col:
                 for p in probs:
                     with st.container(border=True):
-                        st.subheader(f'第{p["number"]}問')
+                        st.markdown(f'**第{p["number"]}問**')
                         st.image(load_image(p), use_container_width=True)
 
-        with st.form(f'quiz_form_{st.session_state.q_id}'):
-            sel = st.radio(
-                '年度を選んでください：',
-                options=range(len(choices)),
-                format_func=lambda i: f'{LABELS[i]}　　{choices[i]["year"]}年度',
-                index=None,
-                disabled=st.session_state.answered,
-            )
-            submitted = st.form_submit_button(
-                '✅ 答え合わせ',
-                type='primary',
-                disabled=st.session_state.answered,
-                use_container_width=True,
-            )
-
-        if submitted and not st.session_state.answered:
-            if sel is None:
-                st.warning('選択肢を選んでから「答え合わせ」を押してください。')
-                st.stop()
+        sel = st.radio(
+            '年度を選んでください：',
+            options=range(len(choices)),
+            format_func=lambda i: f'{LABELS[i]}　　{choices[i]["year"]}年度',
+            index=None,
+            key=f'radio_{st.session_state.q_id}',
+            disabled=st.session_state.answered,
+        )
+        submitted = st.button(
+            '✅ 答え合わせ',
+            type='primary',
+            disabled=st.session_state.answered or sel is None,
+            use_container_width=True,
+        )
         if submitted and sel is not None and not st.session_state.answered:
             st.session_state.elapsed_time = time.time() - st.session_state.question_start_time
             st.session_state.selected_idx = sel
@@ -758,7 +748,7 @@ def main():
         y_choices = qdata['year_choices']
         max_num   = qdata['max_num']
 
-        st.subheader('❓ この問題は何年度の第何問でしょう？')
+        st.markdown('**❓ この問題は何年度の第何問でしょう？**')
         if show_t:
             st.caption(f'種別: {q["type"]}')
 
@@ -766,35 +756,31 @@ def main():
             img = load_image(q)
             st.image(img, use_container_width=True)
 
-        with st.form(f'quiz_form_{st.session_state.q_id}'):
-            col_y, col_n = st.columns(2)
-            with col_y:
-                sel_year = st.radio(
-                    '年度を選んでください：',
-                    options=range(len(y_choices)),
-                    format_func=lambda i: f'{LABELS[i]}　{y_choices[i]}年度',
-                    index=None,
-                    disabled=st.session_state.answered,
-                )
-            with col_n:
-                sel_num = st.radio(
-                    '問番号を選んでください：',
-                    options=range(1, max_num + 1),
-                    format_func=lambda i: f'第{i}問',
-                    index=None,
-                    disabled=st.session_state.answered,
-                )
-            submitted = st.form_submit_button(
-                '✅ 答え合わせ',
-                type='primary',
+        col_y, col_n = st.columns(2)
+        with col_y:
+            sel_year = st.radio(
+                '年度を選んでください：',
+                options=range(len(y_choices)),
+                format_func=lambda i: f'{LABELS[i]}　{y_choices[i]}年度',
+                index=None,
+                key=f'radio_year_{st.session_state.q_id}',
                 disabled=st.session_state.answered,
-                use_container_width=True,
             )
-
-        if submitted and not st.session_state.answered:
-            if sel_year is None or sel_num is None:
-                st.warning('年度と問番号の両方を選んでから「答え合わせ」を押してください。')
-                st.stop()
+        with col_n:
+            sel_num = st.radio(
+                '問番号を選んでください：',
+                options=range(1, max_num + 1),
+                format_func=lambda i: f'第{i}問',
+                index=None,
+                key=f'radio_num_{st.session_state.q_id}',
+                disabled=st.session_state.answered,
+            )
+        submitted = st.button(
+            '✅ 答え合わせ',
+            type='primary',
+            disabled=st.session_state.answered or sel_year is None or sel_num is None,
+            use_container_width=True,
+        )
         if submitted and sel_year is not None and sel_num is not None and not st.session_state.answered:
             st.session_state.elapsed_time      = time.time() - st.session_state.question_start_time
             st.session_state.selected_year_idx = sel_year
